@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use clap::Parser;
 
 use crate::config;
+use crate::config::Config;
 
 #[derive(Parser, Debug)]
 #[command(rename_all = "kebab-case")]
@@ -45,6 +46,18 @@ pub struct Opts {
         value_delimiter(',')
     )]
     pub config_dirs: Vec<PathBuf>,
+
+    /// Select output format of a graph.
+    /// By default DOT (Graphviz).
+    /// You can choose: dot, mermaid
+    /// Generated contents printed to stdout.
+    #[arg(
+        id = "output-format",
+        short = 'f',
+        long
+    )]
+    pub output_format: String,
+
 }
 
 impl Opts {
@@ -62,6 +75,9 @@ impl Opts {
                 .map(|dir| config::ConfigPath::Dir(dir.to_path_buf())),
         )
         .collect()
+    }
+    fn output_format(self) -> String {
+        self.output_format
     }
 }
 
@@ -83,6 +99,28 @@ pub(crate) fn cmd(opts: &Opts) -> exitcode::ExitCode {
         }
     };
 
+    let mut graph = String::from("");
+    let output_format = opts.output_format();
+    if output_format == "dot" {
+        graph = graphviz_graph(config)
+    } else {
+        if output_format == "mermaid" {
+            graph = mermaid_graph(config)
+        }
+    }
+
+
+
+    #[allow(clippy::print_stdout)]
+    {
+        println!("{}", graph);
+    }
+
+    exitcode::OK
+}
+
+/// Grate a GarphViz topology graph visualisation
+fn graphviz_graph(config: Config) -> String {
     let mut dot = String::from("digraph {\n");
 
     for (id, _source) in config.sources() {
@@ -126,11 +164,51 @@ pub(crate) fn cmd(opts: &Opts) -> exitcode::ExitCode {
     }
 
     dot += "}";
+    dot
+}
 
-    #[allow(clippy::print_stdout)]
-    {
-        println!("{}", dot);
+/// Grate a Mermaidjs topology graph visualisation
+fn mermaid_graph(config: Config) -> String {
+    let mut mm = String::from("flowchart TD\n");
+
+    for (id, _source) in config.sources() {
+        writeln!(mm, "  {}[/{}\\]", id, id).expect("write to String never fails");
     }
 
-    exitcode::OK
+    for (id, transform) in config.transforms() {
+        writeln!(mm, "  {}[{{ {} }}]", id, id).expect("write to String never fails");
+
+        for input in transform.inputs.iter() {
+            if let Some(port) = &input.port {
+                writeln!(
+                    mm,
+                    "  {}--{}-->{}", // label in the middle
+                    input.component, port, id
+                )
+                .expect("write to String never fails");
+            } else {
+                writeln!(mm, "  {}-->{}", input, id)
+                    .expect("write to String never fails");
+            }
+        }
+    }
+
+    for (id, sink) in config.sinks() {
+        writeln!(mm, "  {}[\\ {} /]", id, id).expect("write to String never fails");
+
+        for input in &sink.inputs {
+            if let Some(port) = &input.port {
+                writeln!(
+                    mm,
+                    "  {}--{}-->{}",
+                    input.component, port, id
+                )
+                .expect("write to String never fails");
+            } else {
+                writeln!(mm, "  {}-->{}", input, id)
+                    .expect("write to String never fails");
+            }
+        }
+    }
+    mm
 }
