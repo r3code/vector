@@ -119,7 +119,7 @@ pub(crate) fn cmd(opts: &Opts) -> exitcode::ExitCode {
     exitcode::OK
 }
 
-/// Grate a GarphViz topology graph visualisation
+
 fn graphviz_graph(config: Config) -> String {
     let mut dot = String::from("digraph {\n");
 
@@ -167,7 +167,6 @@ fn graphviz_graph(config: Config) -> String {
     dot
 }
 
-/// Grate a Mermaidjs topology graph visualisation
 fn mermaid_graph(config: Config) -> String {
     let mut mm = String::from("flowchart TD\n");
 
